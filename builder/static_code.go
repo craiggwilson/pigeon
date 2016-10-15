@@ -276,6 +276,11 @@ type parser struct {
 	pt       savepoint
 	cur      current
 
+	// errors
+	maxSavePoint savepoint
+	maxFound string
+	maxExpected []string
+	
 	data []byte
 	errs *errList
 
@@ -297,6 +302,21 @@ type parser struct {
 
 	// stats
 	exprCnt int
+}
+
+func (p *parser) setMaxSavePoint(current string, expected string) {
+	if p.pt.offset > p.maxSavePoint.offset {
+		p.maxFound = current
+		p.maxSavePoint = p.pt
+		p.maxExpected = []string{expected}
+	} else if p.pt.offset == p.maxSavePoint.offset {
+		for _, e := range p.maxExpected {
+			if e == expected {
+				return
+			}
+		}
+		p.maxExpected = append(p.maxExpected, expected)
+	}
 }
 
 // push a variable set on the vstack.
@@ -480,11 +500,28 @@ func (p *parser) parse(g *grammar) (val interface{}, err error) {
 	if !ok {
 		if len(*p.errs) == 0 {
 			// make sure this doesn't go out silently
-			p.addErr(errNoMatch)
+			if len(p.maxExpected) > 0 {
+				expected := "'" + p.maxExpected[0] + "'"
+				for i := 1; i < len(p.maxExpected) && i < 5; i++ {
+					expected += ", '" + p.maxExpected[i] + "'"
+				}
+				if len(p.maxExpected) > 5 {
+					expected += fmt.Sprintf(", and %%d others", len(p.maxExpected) - 5) 
+				}
+
+				found := p.maxFound
+				if len(p.maxFound) == 0 {
+					found = string(p.maxSavePoint.rn)
+				}
+
+				p.addErrAt(fmt.Errorf("syntax error, unexpected '%%s', expecting %%s", found, expected), p.maxSavePoint.position)
+			} else {
+				p.addErr(errNoMatch)
+			}
 		}
 		return nil, p.errs.err()
 	}
-	return val, p.errs.err()
+	return val, nil
 }
 
 func (p *parser) parseRule(rule *rule) (interface{}, bool) {
@@ -584,8 +621,10 @@ func (p *parser) parseActionExpr(act *actionExpr) (interface{}, bool) {
 		actVal, err := act.run(p)
 		if err != nil {
 			p.addErrAt(err, start.position)
+			ok = false
+		} else {
+			val = actVal
 		}
-		val = actVal
 	}
 	if ok && p.debug {
 		p.print(strings.Repeat(" ", p.depth) + "MATCH", string(p.sliceFrom(start)))
@@ -729,6 +768,7 @@ func (p *parser) parseLitMatcher(lit *litMatcher) (interface{}, bool) {
 			cur = unicode.ToLower(cur)
 		}
 		if cur != want {
+			p.setMaxSavePoint(string(p.sliceFrom(start)) + string(cur), lit.val)
 			p.restore(start)
 			return nil, false
 		}
