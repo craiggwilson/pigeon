@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/PuerkitoBio/pigeon/ast"
+	"github.com/craiggwilson/pigeon/ast"
 )
 
 var scanValidCases = []string{

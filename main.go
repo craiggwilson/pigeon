@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/PuerkitoBio/pigeon/ast"
-	"github.com/PuerkitoBio/pigeon/builder"
+	"github.com/craiggwilson/pigeon/ast"
+	"github.com/craiggwilson/pigeon/builder"
 )
 
 var exit = os.Exit
